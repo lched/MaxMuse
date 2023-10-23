@@ -1,0 +1,6 @@
+[submodule "external/liblsl"]
+	path = external/liblsl
+	url = https://github.com/sccn/liblsl.git
+[submodule "external/libresample"]
+	path = external/libresample
+	url = https://github.com/8W9aG/libresample.git
