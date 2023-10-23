@@ -30,17 +30,7 @@ add_library(
 #############################################################
 # EXTERNAL DEPENDENCIES
 #############################################################
-
-# LSL Library
-message("LSL install folder: ${LSL_INSTALL_ROOT}")
-find_package(LSL REQUIRED
-	PATHS ${LSL_INSTALL_ROOT}
-)
-if(LSL_FOUND)
-	message("LSL found")
-endif()
-target_link_libraries(${PROJECT_NAME} PRIVATE LSL::lsl)
-
+target_link_libraries(${PROJECT_NAME} PRIVATE lsl)
 
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
 

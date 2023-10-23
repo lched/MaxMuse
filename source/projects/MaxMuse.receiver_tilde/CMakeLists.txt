@@ -30,20 +30,7 @@ add_library(
 #############################################################
 # EXTERNAL DEPENDENCIES
 #############################################################
-
-#Libresample library
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/libresample")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/libresample/include")
-
-# LSL Library
-message("LSL install folder: ${LSL_INSTALL_ROOT}")
-find_package(LSL REQUIRED
-	PATHS ${LSL_INSTALL_ROOT}
-)
-if(LSL_FOUND)
-	message("LSL found")
-endif()
-target_link_libraries(${PROJECT_NAME} PRIVATE LSL::lsl libresample)
+target_link_libraries(${PROJECT_NAME} PRIVATE lsl libresample)
 
 
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)

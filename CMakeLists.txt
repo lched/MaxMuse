@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.19)
-project(MaxLSL)
+project(MaxLSL VERSION 1.0.0)
 
 enable_testing()
 
-message("LSL install root: ${LSL_INSTALL_ROOT}")
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external)
+
 string(REGEX REPLACE "(.*)/" "" THIS_PACKAGE_NAME "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (APPLE)
@@ -48,16 +49,3 @@ endforeach ()
 
 # Comment the line below if you want automatic cmake regeneration enabled
 set(CMAKE_SUPPRESS_REGENERATION true)
-
-#############################################################
-# COPY DLL
-#############################################################
-
-# Doesn't work yet
-# if (WIN32)
-#     # Copy the LSL DLL to the package folder
-#     add_custom_command(TARGET ${THIS_PACKAGE_NAME} POST_BUILD
-#             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-#             "${LSL_INSTALL_ROOT}/build/install/bin/liblsl64.dll"
-#             $<TARGET_FILE_DIR:${CMAKE_CURRENT_SOURCE_DIR}/externals>)
-# endif ()
