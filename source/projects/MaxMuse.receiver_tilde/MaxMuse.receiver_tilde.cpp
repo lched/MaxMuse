@@ -14,10 +14,12 @@
 
 #include "c74_min.h"
 
+#define MINIMUM(A, B) (A) < (B)? (A) : (B)
+
 const double LSL_SCAN_TIMEOUT = 0.2;
 const int LSL_MAX_SAMPLES = 1;
 const double LSL_PULL_TIMEOUT = 0.0;
-const int SRC_BUFFER_SIZE = 256;
+const int SRC_BUFFER_SIZE = 64;
 
 using namespace c74::min;
 
@@ -54,32 +56,31 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     std::mutex dstResamplingMutex;
 
     // Resample method
-    void resample(float *src, float *dst, int srclen, double factor,
-                  int srcblocksize, int dstblocksize) {
-        int expectedlen = (int)(srclen * factor);
+    void resample(void *handle, float *src, float *dst, int src_len,
+                  double factor, int srcblocksize, int dstblocksize) {
+        int expectedlen = (int)(src_len * factor);
         int dstlen = expectedlen + 1000;
-        void *handle;
         int i, out, o, srcused;
         int srcpos, lendiff;
 
-        handle = resample_open(1, factor, factor);
         out = 0;
         srcpos = 0;
         for (;;) {
-            int srcBlock = MIN(srclen - srcpos, srcblocksize);
-            int lastFlag = (srcBlock == srclen - srcpos);
+            int srcBlock = MINIMUM(src_len - srcpos, srcblocksize);
+            // int lastFlag = (srcBlock == src_len - srcpos);
+            int lastFlag =
+                0; // this is never needed as we pass buffers of the same size
 
             o = resample_process(handle, factor, &src[srcpos], srcBlock,
                                  lastFlag, &srcused, &dst[out],
-                                 MIN(dstlen - out, dstblocksize));
+                                 MINIMUM(dstlen - out, dstblocksize));
             srcpos += srcused;
             if (o >= 0)
                 out += o;
-            if (o < 0 || (o == 0 && srcpos == srclen))
+            if (o < 0 || (o == 0 && srcpos == src_len))
                 break;
             // std::cout << "Out:" << std::to_string(out) << std::endl;
         }
-        resample_close(handle);
 
         if (o < 0)
             std::cout << "Error: resample_process returned an error: " << o
@@ -210,13 +211,17 @@ void listenForSamples() {
 }
 
 void resampleWhenReady() {
+    while (!stopThreadFlag) {
+        // wait 10 ms
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (dsp_setup_done)
+            break;
+    }
     std::vector<float> in_sample(n_channels);
     int dst_index;
+    void *handle = resample_open(1, resampling_factor, resampling_factor);
 
     while (!stopThreadFlag) {
-        if (!dsp_setup_done)
-            continue;
-
         if (lsl_to_resampler_fifo.try_dequeue(in_sample)) {
             src[src_current_idx] = in_sample[0];
             src_current_idx++;
@@ -225,11 +230,11 @@ void resampleWhenReady() {
                     dst_index = 0;
                 else
                     dst_index = dst_len;
-                std::unique_lock<std::mutex> lock(dstResamplingMutex);
                 std::cout << "dst index" << std::to_string(dst_index)
                           << std::endl;
-                resample(src, dst + dst_index, src_len, resampling_factor,
-                         src_len, dst_len);
+                std::unique_lock<std::mutex> lock(dstResamplingMutex);
+                resample(handle, src, dst + dst_index, src_len,
+                         resampling_factor, src_len, dst_len);
                 lock.unlock();
                 src_current_idx = 0;
                 firstBufferDone = true;
@@ -237,6 +242,7 @@ void resampleWhenReady() {
             }
         }
     }
+    resample_close(handle);
 }
 
 void operator()(audio_bundle _, audio_bundle output) {

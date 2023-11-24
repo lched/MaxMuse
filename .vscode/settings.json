@@ -81,10 +81,15 @@
         "xloctime": "cpp",
         "xtree": "cpp",
         "ranges": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "*.ipp": "cpp",
+        "any": "cpp",
+        "codecvt": "cpp",
+        "complex": "cpp",
+        "coroutine": "cpp",
+        "csignal": "cpp",
+        "shared_mutex": "cpp",
+        "source_location": "cpp"
     },
     "cmake.configureOnOpen": true,
-    "cmake.configureArgs": [
-        "-DLSL_INSTALL_ROOT=C:/Users/leoch/LSL"
-    ]
 }
