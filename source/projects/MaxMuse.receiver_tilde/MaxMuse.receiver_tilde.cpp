@@ -1,7 +1,6 @@
-/// @file
-///	@ingroup 	minexamples
-///	@copyright	Copyright 2018 The Min-DevKit Authors. All rights
-/// reserved.
+/// @file       MaxMuse.receiver_tilde.cpp
+///	@ingroup 	MaxMuselibrary
+///	@copyright
 ///	@license	Use of this source code is governed by the MIT License
 /// found in the License.md file.
 
@@ -13,6 +12,8 @@
 #include <vector>
 
 #include "c74_min.h"
+
+#define MINIMUM(A, B) (A) < (B) ? (A) : (B)
 
 const double LSL_SCAN_TIMEOUT = 0.2;
 const int LSL_MAX_SAMPLES = 1;

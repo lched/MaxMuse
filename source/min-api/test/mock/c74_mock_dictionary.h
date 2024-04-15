@@ -22,6 +22,14 @@ namespace max {
         return nullptr;
     }
 
+    MOCK_EXPORT t_max_err dictionary_getatoms(t_dictionary* d, t_symbol* key, long* argc, t_atom** argv) {
+        return 0;
+    }
+
+    MOCK_EXPORT t_max_err dictionary_appendatoms(t_dictionary* d, t_symbol* key, long argc, t_atom* argv) {
+        return 0;
+    } 
+
     MOCK_EXPORT t_max_err dictionary_appendatomarray(t_dictionary* d, t_symbol* key, t_object* value) {
         return 0;
     }
@@ -31,6 +39,14 @@ namespace max {
     }
 
     MOCK_EXPORT t_max_err dictionary_appendlong(t_dictionary* d, t_symbol* key, t_atom_long value) {
+        return 0;
+    }
+
+    MOCK_EXPORT long dictionary_hasentry(t_dictionary* d, t_symbol* key) {
+        return 0;
+    }
+
+    MOCK_EXPORT t_max_err dictionary_chuckentry(t_dictionary* d, t_symbol* key) {
         return 0;
     }
 

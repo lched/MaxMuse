@@ -4,3 +4,9 @@
 [submodule "external/libresample"]
 	path = external/libresample
 	url = https://github.com/8W9aG/libresample.git
+[submodule "source/min-lib"]
+	path = source/min-lib
+	url = https://github.com/Cycling74/min-lib.git
+[submodule "source/min-api"]
+	path = source/min-api
+	url = https://github.com/lched/min-api.git

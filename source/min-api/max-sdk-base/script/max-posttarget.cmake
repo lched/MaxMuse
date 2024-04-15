@@ -94,6 +94,28 @@ if (APPLE AND NOT "${PROJECT_NAME}" MATCHES "_test")
 		TARGET ${PROJECT_NAME} 
 		POST_BUILD 
 		COMMAND cp "${CMAKE_CURRENT_LIST_DIR}/PkgInfo" "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${${PROJECT_NAME}_EXTERN_OUTPUT_NAME}.mxo/Contents/PkgInfo" 
+		VERBATIM
 		COMMENT "Copy PkgInfo" 
 	)
+
+	if(MAX_SDK_CODESIGN_EXTERNS)
+		if(NOT DEFINED MAX_SDK_CODESIGN_IDENTITY)
+			set(MAX_SDK_CODESIGN_IDENTITY "-")
+			message(STATUS "Code signing with ad-hoc identity")
+		else()
+            execute_process(
+                COMMAND security find-identity -p codesigning -v
+                OUTPUT_VARIABLE security_output
+            )
+            if (MAX_SDK_CODESIGN_IDENTITY AND security_output MATCHES "${MAX_SDK_CODESIGN_IDENTITY}")
+                message(STATUS "Code signing identity found, will sign")		
+			else()
+				set(MAX_SDK_CODESIGN_IDENTITY "-")
+				message(STATUS "Code signing with ad-hoc identity")
+			endif()
+		endif()
+		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+			COMMAND codesign -s ${MAX_SDK_CODESIGN_IDENTITY} -f --deep $<TARGET_BUNDLE_DIR:${PROJECT_NAME}> 2>/dev/null
+		)
+	endif()
 endif ()

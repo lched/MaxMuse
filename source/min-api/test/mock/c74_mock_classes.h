@@ -239,6 +239,10 @@ MOCK_EXPORT method zgetfn(t_object *op, t_symbol *msg)
     return (*messlist)[msg->s_name];
 }
 
+MOCK_EXPORT t_object *object_clone(t_object *x) {
+    return nullptr;
+}
+
 MOCK_EXPORT void *object_method_imp(void *x, void *sym, void *p1, void *p2, void *p3, void *p4, void *p5, void *p6, void *p7, void *p8)
 {
     return nullptr;

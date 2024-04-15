@@ -90,7 +90,7 @@ namespace mock {
         }
 
         auto now() {
-            return std::chrono::high_resolution_clock::now();
+            return std::chrono::steady_clock::now();
         }
 
         void tick() {
