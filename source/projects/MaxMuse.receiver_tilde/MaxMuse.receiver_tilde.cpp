@@ -119,8 +119,8 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
             prop = "type";
             value = "EEG";
         } else {
-            prop = args[0];
-            value = args[1];
+            prop = (std::string)args[0];
+            value = (std::string)args[1];
         }
         std::vector<lsl::stream_info> results =
             lsl::resolve_stream(prop, value, 1, LSL_SCAN_TIMEOUT);

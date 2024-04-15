@@ -3,11 +3,7 @@ This package was created using the Min-DevKit for Max, an API and supporting too
 
 
 ## Building
-This must be built by passing the LSL_INSTALL_ROOT variable to CMake.
-See the liblsl repository for information about building LSL and/or downloading latest releases.
 
-    "-DLSL_INSTALL_ROOT=path/to/liblsl/build/install/"
-Note: CMake accepts arguments passed with no space. Yeah it's weird.
 
 ## Prerequisites
 
