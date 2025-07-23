@@ -44,6 +44,7 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     bool dsp_setup_done = false;
 
     // resample buffers
+    void* resampleHandle = nullptr;
     int src_current_idx = 0;
     int dst_current_idx = 0;
     int src_len, dst_len;
@@ -54,6 +55,15 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     // resample mutex
     std::mutex dstResamplingMutex;
 
+    void setupResampler() {
+        resampleHandle = resample_open(1, resampling_factor, resampling_factor);
+    }
+
+    void teardownResampler() {
+        if (resampleHandle)
+            resample_close(resampleHandle);
+    }
+
     // Resample method
     void resample(float *src, float *dst, int srclen, double factor,
                   int srcblocksize, int dstblocksize) {
@@ -63,14 +73,14 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
         int i, out, o, srcused;
         int srcpos, lendiff;
 
-        handle = resample_open(1, factor, factor);
+        // handle = resample_open(1, factor, factor);
         out = 0;
         srcpos = 0;
         for (;;) {
             int srcBlock = MIN(srclen - srcpos, srcblocksize);
             int lastFlag = (srcBlock == srclen - srcpos);
 
-            o = resample_process(handle, factor, &src[srcpos], srcBlock,
+            o = resample_process(resampleHandle, factor, &src[srcpos], srcBlock,
                                  lastFlag, &srcused, &dst[out],
                                  MIN(dstlen - out, dstblocksize));
             srcpos += srcused;
@@ -80,7 +90,7 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
                 break;
             // std::cout << "Out:" << std::to_string(out) << std::endl;
         }
-        resample_close(handle);
+        // resample_close(handle);
 
         if (o < 0)
             std::cout << "Error: resample_process returned an error: " << o
@@ -152,6 +162,7 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     ~receiver_tilde() {
         // Stop the threads gracefully
         stopThreads();
+        teardownResampler();
     };
 
     message<> dspsetup{this, "dspsetup",
@@ -173,6 +184,7 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     dst_buffer_size = dst_len * 2;
     src = (float *)calloc(src_len, sizeof(float));
     dst = (float *)calloc(dst_buffer_size + 100, sizeof(float));
+    setupResampler();
     dsp_setup_done = true;
     createOrRestartThreads();
     return {};
