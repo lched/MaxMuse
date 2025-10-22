@@ -31,7 +31,10 @@ jobs:
 
     - name: configure_windows
       if: matrix.os == 'windows-latest'
-      run: mkdir build && cd build && cmake ..
+      run: |
+        mkdir build
+        cd build
+        cmake -G "Visual Studio 16 2019" -A x64 -DCMAKE_CXX_STANDARD=17 ..
 
     - name: build_debug
       if: matrix.config == 'debug'
