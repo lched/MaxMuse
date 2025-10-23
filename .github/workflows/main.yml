@@ -31,10 +31,7 @@ jobs:
 
     - name: configure_windows
       if: matrix.os == 'windows-latest'
-      run: |
-        mkdir build
-        cd build
-        cmake -G "Visual Studio 17 2022" -A x64 -DCMAKE_CXX_STANDARD=17 ..
+      run: mkdir build && cd build && cmake ..
 
     - name: build_debug
       if: matrix.config == 'debug'
