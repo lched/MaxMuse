@@ -27,13 +27,6 @@ if (APPLE)
     endif()
 endif()
 
-if(MSVC)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
-    add_compile_options(/std:c++17)
-endif()
-
 
 # Misc setup and subroutines
 include(${CMAKE_CURRENT_SOURCE_DIR}/source/min-api/script/min-package.cmake)
