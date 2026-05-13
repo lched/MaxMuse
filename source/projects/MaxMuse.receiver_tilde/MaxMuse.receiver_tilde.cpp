@@ -13,8 +13,6 @@
 
 #include "c74_min.h"
 
-#define MINIMUM(A, B) (A) < (B) ? (A) : (B)
-
 const double LSL_SCAN_TIMEOUT = 0.2;
 const int LSL_MAX_SAMPLES = 1;
 const double LSL_PULL_TIMEOUT = 0.0;
@@ -42,24 +40,24 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     bool dsp_setup_done = false;
 
     // resample buffers
-    void* resample_handle = nullptr;
+    void *resample_handle = nullptr;
     int src_current_idx = 0;
     int dst_current_idx = 0;
     int src_len, dst_len;
     int dst_buffer_size;
-    float *src = nullptr;
-    float *dst = nullptr;
-
-    int dst_write_pos = 0; // where resampler writes next (0..dst_buffer_size-1)
-    int dst_read_pos = 0;  // read index used by audio thread
+    std::vector<float *> src; // One buffer per channel
+    std::vector<float *> dst; // One buffer per channel
+    std::vector<int>
+        dst_write_pos; // where resampler writes next (0..dst_buffer_size-1)
+    std::vector<int> dst_read_pos; // read index used by audio thread
 
     // resample mutex
     std::mutex dstResamplingMutex;
 
     // Resample method
     // returns number of produced output samples, or -1 on error
-    // returns number of produced output samples, or -1 on error
-    int resample_block(float *srcbuf, int srclen, float *outbuf, int outbuf_capacity) {
+    int resample_block(float *srcbuf, int srclen, float *outbuf,
+                       int outbuf_capacity) {
         if (!resample_handle) {
             std::cerr << "Resampler handle not initialized\n";
             return -1;
@@ -72,13 +70,16 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
 
         for (;;) {
             int srcBlock = MIN(srclen - srcpos, srclen); // full remaining block
-            int lastFlag = 0; // streaming; only set to 1 when you're shutting down for real
+            int lastFlag = 0; // streaming; only set to 1 when you're shutting
+                              // down for real
 
-            o = resample_process(resample_handle, resampling_factor, &srcbuf[srcpos], srcBlock,
-                                lastFlag, &srcused, &outbuf[out],
-                                MIN(outbuf_capacity - out, outbuf_capacity));
+            o = resample_process(resample_handle, resampling_factor,
+                                 &srcbuf[srcpos], srcBlock, lastFlag, &srcused,
+                                 &outbuf[out],
+                                 MIN(outbuf_capacity - out, outbuf_capacity));
             srcpos += srcused;
-            if (o >= 0) out += o;
+            if (o >= 0)
+                out += o;
             if (o < 0 || (o == 0 && srcpos == srclen))
                 break;
         }
@@ -89,7 +90,6 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
         }
         return out;
     }
-
 
   public:
     MIN_DESCRIPTION{"Receive an LSL stream and send it to Max."};
@@ -105,7 +105,8 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
         std::string prop, value;
 
         if (args.size() < 2) {
-            cout << "Not enough arguments provided, defaulting to 'type' 'EEG'" << endl;
+            cout << "Not enough arguments provided, defaulting to 'type' 'EEG'"
+                 << endl;
             prop = "type";
             value = "EEG";
         } else {
@@ -125,9 +126,9 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
             n_channels = lsl_inlet->info().channel_count();
             og_sample_rate = lsl_inlet->info().nominal_srate();
             std::cout << "[LSL] Number of channels: "
-                        << std::to_string(n_channels) << std::endl;
+                      << std::to_string(n_channels) << std::endl;
             std::cout << "[LSL] Sampling rate: "
-                        << std::to_string(og_sample_rate) << std::endl;
+                      << std::to_string(og_sample_rate) << std::endl;
 
             for (auto i = 0; i < n_channels; i++) {
                 auto an_outlet = std::make_unique<outlet<>>(
@@ -140,21 +141,22 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
     };
 
     ~receiver_tilde() {
-        // Stop the threads gracefully
         stopThreads();
-        if (resample_handle) {
-            resample_close(resample_handle);
-            resample_handle = nullptr;
+        for (int ch = 0; ch < n_channels; ++ch) {
+            if (resample_handle) {
+                resample_close(resample_handle);
+                resample_handle = nullptr;
+            }
+            if (src[ch]) {
+                free(src[ch]);
+                src[ch] = nullptr;
+            }
+            if (dst[ch]) {
+                free(dst[ch]);
+                dst[ch] = nullptr;
+            }
         }
-        if (src) {
-            free(src);
-            src = nullptr;
-        }
-        if (dst){
-            free(dst);
-            dst = nullptr;
-        }
-    };
+    }
 
     message<> dspsetup{this, "dspsetup",
                        MIN_FUNCTION{number samplerate = args[0];
@@ -173,8 +175,17 @@ class receiver_tilde : public object<receiver_tilde>, public vector_operator<> {
               << std::endl;
 
     dst_buffer_size = dst_len * 2;
-    src = (float *)calloc(src_len, sizeof(float));
-    dst = (float *)calloc(dst_buffer_size + 16, sizeof(float));
+    src.resize(n_channels);
+    dst.resize(n_channels);
+    dst_write_pos.resize(n_channels, 0);
+    dst_read_pos.resize(n_channels, 0);
+
+    for (int ch = 0; ch < n_channels; ++ch) {
+        src[ch] = (float *)calloc(src_len, sizeof(float));
+        dst[ch] = (float *)calloc(dst_buffer_size + 16, sizeof(float));
+        resample_handle = resample_open(
+            1, resampling_factor, resampling_factor); // One handle per channel
+    }
 
     if (resample_handle)
         resample_close(resample_handle);
@@ -196,7 +207,9 @@ void stopThreads() {
 
 void createOrRestartThreads() {
     if (!lsl_inlet) {
-        std:cerr << "[receiver~] Cannot start threads because there is no LSL inlet.\n";
+    std:
+        cerr << "[receiver~] Cannot start threads because there is no LSL "
+                "inlet.\n";
         return;
     }
     stopThreads();
@@ -227,22 +240,30 @@ void resampleWhenReady() {
             continue;
 
         if (lsl_to_resampler_fifo.try_dequeue(in_sample)) {
-            src[src_current_idx++] = in_sample[0];
+            // Enqueue samples for ALL channels
+            for (int ch = 0; ch < n_channels; ++ch) {
+                src[ch][src_current_idx] = in_sample[ch];
+            }
+            src_current_idx++;
 
             if (src_current_idx >= SRC_BUFFER_SIZE) {
-                // We have a full src block, resample it into a temporary buffer
-                std::vector<float> temp_out(dst_len + 128);
-                int produced = resample_block(src, src_len, temp_out.data(), (int)temp_out.size());
-                src_current_idx = 0;
-
-                if (produced > 0) {
-                    std::unique_lock<std::mutex> lock(dstResamplingMutex);
-                    for (int i = 0; i < produced; ++i) {
-                        dst[dst_write_pos] = temp_out[i];
-                        dst_write_pos = (dst_write_pos + 1) % dst_buffer_size;
+                // Resample each channel
+                for (int ch = 0; ch < n_channels; ++ch) {
+                    std::vector<float> temp_out(dst_len + 128);
+                    int produced =
+                        resample_block(src[ch], src_len, temp_out.data(),
+                                       (int)temp_out.size());
+                    if (produced > 0) {
+                        std::unique_lock<std::mutex> lock(dstResamplingMutex);
+                        for (int i = 0; i < produced; ++i) {
+                            dst[ch][dst_write_pos[ch]] = temp_out[i];
+                            dst_write_pos[ch] =
+                                (dst_write_pos[ch] + 1) % dst_buffer_size;
+                        }
                     }
-                    firstBufferDone = true;
                 }
+                src_current_idx = 0;
+                firstBufferDone = true;
             } else {
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
@@ -252,22 +273,23 @@ void resampleWhenReady() {
 
 void operator()(audio_bundle _, audio_bundle output) {
     if (!dsp_setup_done || !firstBufferDone) {
-        // Output silence until first block available
+        // Output silence for all channels
         for (auto ch = 0; ch < output.channel_count(); ++ch)
-            for(auto i = 0; i < output.frame_count(); ++i)
+            for (auto i = 0; i < output.frame_count(); ++i)
                 output.samples(ch)[i] = 0.0f;
         return;
     }
 
-    for (auto i = 0; i < output.frame_count(); i++) {
-        // read sample under lock for a single sample
-        float s;
-        {
-            std::unique_lock<std::mutex> lock(dstResamplingMutex);
-            s = dst[dst_read_pos];
-            dst_read_pos = (dst_read_pos + 1) % dst_buffer_size;
+    for (auto ch = 0; ch < output.channel_count(); ++ch) {
+        for (auto i = 0; i < output.frame_count(); ++i) {
+            float s;
+            {
+                std::unique_lock<std::mutex> lock(dstResamplingMutex);
+                s = dst[ch][dst_read_pos[ch]];
+                dst_read_pos[ch] = (dst_read_pos[ch] + 1) % dst_buffer_size;
+            }
+            output.samples(ch)[i] = s;
         }
-        output.samples(0)[i] = s;
     }
 }
 }
