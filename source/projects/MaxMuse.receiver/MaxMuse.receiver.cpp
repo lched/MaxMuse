@@ -1,9 +1,9 @@
 /// @file
 ///	@ingroup 	minexamples
 ///	@copyright	Copyright 2018 The Min-DevKit Authors. All rights
-///reserved.
+/// reserved.
 ///	@license	Use of this source code is governed by the MIT License
-///found in the License.md file.
+/// found in the License.md file.
 
 #include <iostream>
 #include <string>
@@ -12,7 +12,6 @@
 
 #include "c74_min.h"
 #include <lsl_cpp.h>
-
 
 const double LSL_SCAN_TIMEOUT = 0.2;
 const int LSL_MAX_SAMPLES = 1;
