@@ -1,101 +1,70 @@
-name: Release
+name: Build MaxMuse Externals
 
 on:
-  create:
-    tags:
-      - v*
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  package:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest]
-        config: [release]
+  # ──────────────────────────────────────────────
+  # Windows build
+  # ──────────────────────────────────────────────
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
-        fetch-depth: '0'
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - uses: benjlevesque/short-sha@v1.2
-      id: short-sha
-      with:
-        length: 7
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
-    - name: configure_windows
-      if: matrix.os == 'windows-latest'
-      run: mkdir build && cd build && cmake ..
+      - name: Build
+        run: cmake --build build --config Release
 
-    - name: build_debug
-      if: matrix.config == 'debug'
-      run: cmake --build build --config 'Debug'
+      - name: Upload Windows externals
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaxMuse-windows
+          # .mxe64 files are the Windows Max externals produced by the build
+          path: |
+            externals/**/*.mxe64
+            build/**/*.mxe64
+          if-no-files-found: warn
 
-    - name: build_release
-      if: matrix.config == 'release'
-      run: cmake --build build --config 'Release'
-
-    - name: test
-      run: cd build && ctest -C ${{ matrix.config }} . -V
-
-    - name: package_windows
-      if: matrix.os == 'windows-latest'
-      shell: cmd
-      env:
-        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
-        GITHUB_CONFIG: ${{ matrix.config }}
-      run: |
-        set PACKAGE_NAME=%GITHUB_REPOSITORY_NAME%
-        mkdir %PACKAGE_NAME%
-        if exist extensions cp -r extensions %PACKAGE_NAME%
-        if exist externals cp -r externals %PACKAGE_NAME%
-        if exist support cp -r support %PACKAGE_NAME%
-        if exist tests cp -r tests %PACKAGE_NAME%
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.event.repository.name }}-${{ steps.short-sha.outputs.sha }}-${{ matrix.config }}
-        path: ${{ github.event.repository.name }}
-
-  release:
-    runs-on: ubuntu-latest
-    needs: package
+  # ──────────────────────────────────────────────
+  # macOS build
+  # ──────────────────────────────────────────────
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v5
-      with:
-        submodules: 'recursive'
-        fetch-depth: '0'
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - uses: battila7/get-version-action@v2
-      id: get_version
+      - name: Configure CMake (Xcode generator)
+        run: cmake -S . -B build -G Xcode -DCMAKE_BUILD_TYPE=Release
 
-    - uses: benjlevesque/short-sha@v1.2
-      id: short-sha
-      with:
-        length: 7
+      - name: Build
+        run: cmake --build build --config Release
 
-    - uses: actions/download-artifact@v2
-      with:
-        name: ${{ github.event.repository.name }}-${{ steps.short-sha.outputs.sha }}-release
-        path: ${{ github.event.repository.name }}
+      - name: Ad-hoc codesign externals (required on Apple Silicon)
+        run: |
+          find build -name "*.mxo" -exec codesign --force --deep -s - {} \;
 
-    - name: Display structure of downloaded files
-      run: ls -R
-      working-directory: ${{ github.event.repository.name }}
-
-    - name: zip
-      run: zip -r ${{ github.event.repository.name }}-package-for-max-${{ steps.get_version.outputs.version }}.zip ${{ github.event.repository.name }}
-
-    - uses: actions/upload-artifact@v2
-      with:
-        name: ${{ github.event.repository.name }}-${{ steps.get_version.outputs.version }}-zipped-release
-        path: ${{ github.event.repository.name }}-package-for-max-${{ steps.get_version.outputs.version }}.zip
-
-    - uses: ncipollo/release-action@v1
-      with:
-        artifacts: ${{ github.event.repository.name }}-package-for-max-${{ steps.get_version.outputs.version }}.zip
-        body: "Max Package for all supported platforms"
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload macOS externals
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaxMuse-macos
+          path: |
+            externals/**/*.mxo
+            build/**/*.mxo
+          if-no-files-found: warn
