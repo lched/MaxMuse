@@ -1,165 +1,174 @@
-name: Build MaxMuse Externals
+name: Build MaxMuse
 
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ──────────────────────────────────────────────
-  # Windows build
-  # ──────────────────────────────────────────────
-  build-windows:
-    name: Build (Windows)
-    runs-on: windows-latest
-
+  # ─────────────────────────────────────────────────────────────
+  # Resampler simulation + LSL loopback tests on the three OSes
+  # ─────────────────────────────────────────────────────────────
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository (with submodules)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive
-
-      - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
+          submodules: true          # needs external/liblsl
+      - name: Configure
+        run: cmake -S test -B build-test -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build-test --config Release --parallel
+      - name: Run
+        # the LSL loopback test reports "skipped" if the runner blocks local multicast
+        run: ctest --test-dir build-test -C Release --output-on-failure
 
-      - name: Upload Windows externals
-        uses: actions/upload-artifact@v4
-        with:
-          name: MaxMuse-windows
-          # .mxe64 files are the Windows Max externals produced by the build
-          path: |
-            externals/**/*.mxe64
-            build/**/*.mxe64
-          if-no-files-found: warn
-
-  # ──────────────────────────────────────────────
-  # macOS build
-  # ──────────────────────────────────────────────
-  build-macos-x86:
-    name: Build (macOS x86_64)
-    runs-on: macos-13   # last Intel-based GitHub runner
-
+  sanitizers:
+    name: Tests (${{ matrix.sanitizer }} sanitizer)
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [ thread, address ]
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository (with submodules)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive
-
-      - name: Configure CMake
+          submodules: true
+      - name: Allow ThreadSanitizer on high-entropy ASLR kernels
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Build and run
+        env:
+          CC: clang
+          CXX: clang++
         run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES=x86_64
+          cmake -S test -B build-san -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS="-fsanitize=${{ matrix.sanitizer }}" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizer }}"
+          cmake --build build-san --parallel
+          ctest --test-dir build-san --output-on-failure
 
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Collect x86_64 externals
-        run: |
-          mkdir -p staging/x86_64
-          find build -name "*.mxo" | while read f; do
-            name=$(basename "$f")
-            cp -R "$f" "staging/x86_64/$name"
-          done
-
-      - name: Upload x86_64 slice
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-x86_64-slice
-          path: staging/x86_64/
-
-  build-macos-arm:
-    name: Build (macOS arm64)
-    runs-on: macos-latest   # ARM runner
-
-    steps:
-      - name: Checkout repository (with submodules)
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure CMake
-        run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Collect arm64 externals
-        run: |
-          mkdir -p staging/arm64
-          find build -name "*.mxo" | while read f; do
-            name=$(basename "$f")
-            cp -R "$f" "staging/arm64/$name"
-          done
-
-      - name: Upload arm64 slice
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-arm64-slice
-          path: staging/arm64/
-
-  build-macos-universal:
-    name: Lipo universal macOS externals
+  # ─────────────────────────────────────────────────────────────
+  # macOS: one universal (arm64 + x86_64) build, no lipo step
+  # ─────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build (macOS universal)
     runs-on: macos-latest
-    needs: [ build-macos-x86, build-macos-arm ]
-
     steps:
-      - name: Download x86_64 slice
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: macos-x86_64-slice
-          path: slices/x86_64/
-
-      - name: Download arm64 slice
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-arm64-slice
-          path: slices/arm64/
-
-      - name: Create universal .mxo bundles with lipo
+          submodules: recursive
+          fetch-depth: 0            # tags, for min-api's version scripts
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Verify universal, self-contained and signed
         run: |
-          mkdir -p universal
-          for arm_bundle in slices/arm64/*.mxo; do
-            name=$(basename "$arm_bundle")
-            x86_bundle="slices/x86_64/$name"
-
-            if [ ! -d "$x86_bundle" ]; then
-              echo "WARNING: no x86_64 counterpart for $name — copying arm64 only"
-              cp -R "$arm_bundle" "universal/$name"
-              continue
+          set -euo pipefail
+          shopt -s nullglob
+          bundles=(externals/*.mxo)
+          [ ${#bundles[@]} -gt 0 ] || { echo "::error::no .mxo was produced"; exit 1; }
+          for b in "${bundles[@]}"; do
+            bin="$b/Contents/MacOS/$(basename "$b" .mxo)"
+            echo "── $b"
+            lipo -info "$bin"
+            lipo "$bin" -verify_arch arm64 x86_64
+            otool -l "$bin" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | grep -E "minos|version" || true
+            if otool -L "$bin" | grep -qi lsl; then
+              echo "::error::$b links liblsl dynamically"; otool -L "$bin"; exit 1
             fi
-
-            # Copy bundle structure from arm64, then lipo the binary inside
-            cp -R "$arm_bundle" "universal/$name"
-
-            # The executable sits at Contents/MacOS/<name-without-.mxo>
-            bin="${name%.mxo}"
-            arm_bin="$arm_bundle/Contents/MacOS/$bin"
-            x86_bin="$x86_bundle/Contents/MacOS/$bin"
-            out_bin="universal/$name/Contents/MacOS/$bin"
-
-            if [ -f "$arm_bin" ] && [ -f "$x86_bin" ]; then
-              lipo -create "$x86_bin" "$arm_bin" -output "$out_bin"
-            else
-              echo "WARNING: could not find binary inside $name — bundle copied as-is"
-            fi
+            codesign --force --deep --sign - "$b"
+            codesign --verify --strict --verbose=2 "$b"
           done
-
-      - name: Ad-hoc codesign universal externals
-        run: |
-          find universal -name "*.mxo" -exec codesign --force --deep -s - {} \;
-
-      - name: Upload universal macOS externals
-        uses: actions/upload-artifact@v4
+          ditto -c -k --keepParent externals macos-externals.zip
+      - uses: actions/upload-artifact@v4
         with:
-          name: MaxMuse-macos-universal
-          path: universal/
-          if-no-files-found: warn
+          name: macos
+          path: |
+            macos-externals.zip
+            package-info.json
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # Windows
+  # ─────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Verify no lsl.dll / VC runtime dependency
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem externals -Filter *.mxe64
+          if ($files.Count -eq 0) { throw "no .mxe64 was produced" }
+          foreach ($f in $files) {
+            $deps = dumpbin /nologo /dependents $f.FullName
+            $deps
+            if ($deps -match '(?i)lsl|vcruntime|msvcp') { throw "$($f.Name) has an unwanted DLL dependency" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: externals/*.mxe64
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # Max package (+ GitHub release on v* tags)
+  # ─────────────────────────────────────────────────────────────
+  package:
+    name: Package
+    needs: [ test, build-macos, build-windows ]
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+      - name: Check the tag matches package-info.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have=$(python3 -c "import json;print(json.load(open('macos/package-info.json'))['version'])")
+          [ "$want" = "$have" ] || { echo "::error::tag $GITHUB_REF_NAME but package-info.json.in says $have"; exit 1; }
+      - name: Assemble the Max package
+        run: |
+          set -euo pipefail
+          mkdir -p MaxMuse
+          ditto -x -k macos/macos-externals.zip MaxMuse
+          cp windows/*.mxe64 MaxMuse/externals/
+          cp -R help docs icon.png License.md ReadMe.md MaxMuse/
+          cp macos/package-info.json MaxMuse/
+          ditto -c -k --keepParent MaxMuse MaxMuse.zip
+          unzip -l MaxMuse.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MaxMuse-package
+          path: MaxMuse.zip
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MaxMuse.zip
+          generate_release_notes: true

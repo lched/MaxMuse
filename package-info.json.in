@@ -1,13 +1,13 @@
 {
-	"author" : "Cycling '74",
-	"description" : "Lightweight reference implementation of a package built using the Min-API.",
-	"homepatcher" : "C++ Object Development Kit.maxpat",
+	"author" : "Léo Chédin",
+	"description" : "Receive LSL streams (Muse 2 EEG, PPG, accelerometer, gyroscope, or any numeric LSL stream) in Max, as messages or as click-free, drift-compensated audio-rate signals.",
+	"homepatcher" : "MaxMuse.receiver~.maxhelp",
 	"max_version_min" : "8.0", "max_version_max" : "none",
 	"name" : "@C74_PACKAGE_NAME@",
 	"os" : {
 		"macintosh" : {
 			"platform" : [ "x64", "aarch64" ],
-			"min_version" : "none"
+			"min_version" : "10.15"
 		},
 		"windows" : {
 			"platform" : [ "x64" ],
@@ -15,10 +15,10 @@
 		}
 	},
 	"package_extra" : {
-		"reverse_domain" : "com.cycling74",
-		"copyright" : "Copyright (c) 2018 Cycling '74"
+		"reverse_domain" : "io.github.lched",
+		"copyright" : "Copyright (c) 2024-2026 Léo Chédin"
 	},
-	"tags" : [ ],
-	"version" : "@GIT_VERSION_MAJ@.@GIT_VERSION_MIN@.@GIT_VERSION_SUB@",
-	"website" : "http://www.github.com/Cycling74/min-devkit"
+	"tags" : [ "lsl", "eeg", "muse", "biosignals" ],
+	"version" : "1.1.0",
+	"website" : "https://github.com/lched/MaxMuse"
 }
